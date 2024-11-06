@@ -74,11 +74,12 @@ li>a{
 
 pre>code {
   font-family: 'JetBrains Mono Medium'!important;
-  font-size: 14px!important;
+  font-size: 16px!important;
+  line-height: 1.5;
 }
 
 article>p {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.8;
 }
 
@@ -89,4 +90,11 @@ h3 {
 h2 {
   font-size: 24px !important;
   line-height: 1.5;
+}
+li {
+  font-size: 16px !important;
+}
+
+.post-item>h3>a {
+  font-size: 22px;
 }
