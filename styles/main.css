@@ -48,6 +48,10 @@ h2 {
   }
 }
 
+.nx-prose {
+  max-width: 75ch;
+}
+
 details summary {
   cursor: pointer;
 }

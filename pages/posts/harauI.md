@@ -29,7 +29,7 @@ SelectTrigger 用来存放点击触发器中的内容如“选择一个选项”
 const SelectContext = createContext<SelectContextProps|undefined>(undefined)
 ```
 ### SelectTrigger
-`SelectTrigger` 组件是下拉菜单的触发器按钮，它使用 `useContext` 来获取上下文，并根据菜单的状态应用不同的样式（选中或者未选中），点击触发器按钮时触发上下文的 `toggleOpen` 函数切换菜单状态，如果后边==选择了选项则会展示选项内容（组件重新渲染了）==
+`SelectTrigger` 组件是下拉菜单的触发器按钮，它使用 `useContext` 来获取上下文，并根据菜单的状态应用不同的样式（选中或者未选中），点击触发器按钮时触发上下文的 `toggleOpen` 函数切换菜单状态，如果后边 **选择了选项则会展示选项内容（组件重新渲染了**
 
 会重新渲染的原因：
 选择选项触发的 `onSelect` 中有 `setSelectedValue` 等更新状态的函数，主组件 Select 的状态发生变化的话就会重新渲染真个组件结构包括 trigger ~
