@@ -37,3 +37,110 @@ const SelectContext = createContext<SelectContextProps|undefined>(undefined)
 `SelectContent` 组件用于显示下拉菜单的内容，获取上下文根据其中的菜单状态选择是否展示选项
 ### SelectItem
 `SelectItem` 组件表示下拉菜单中的一个选项，获取上下文根据选项是否被选中展示不同的样式（勾勾）点击选项时触发上下文的 `onSelect` 选择该选项，并根据使用 `Select` 组件时是否定义了 `onChange` 来处理选择的选项内容~
+
+## 实现深浅主题切换
+一开始直接用的是 `@media(prefers-color-schema='dark') {}` 媒体查询的形式一个个写组件们的深色样式，结果发现没有生效，之后才发现原来这是**直接判断目前系统深浅主题**的功能啊喂！Σ(っ °Д °;)っ
+
+再之后用开发者工具看框架中深浅主题标签的变化，发现 `html` 中有一个属性叫 `data-theme`，切换主题该值会切换，突然回想起来之前写小项目时做过类似的功能，加上对 `ShadcnUI` 的研究，切换可选的话应该有 `system` | `light` | `dark` 三种选项，如果选 `system` 的话就要分析当前系统的主题然后再在 `light` 和 `dark` 之中选一个，有了大概的思路：
+
+**创建一个上下文用提供者组件 `ThemeProvider` 包裹住 ` App `，用于管理和应用主题颜色**
+
+提供者应接收一个必选的 `children` 即子组件，两个可选的 `defaultTheme` 和 `storageKey`，后者负责直接从本地存储取得符合的主题类型
+```tsx
+type ThemeProviderProps = {
+	children: React.ReactNode;
+	defaultTheme?: Theme;
+	storageKey?: string;
+};
+```
+
+`ThemeProviderState`：表示上下文状态，包括当前主题和设置主题的函数
+```tsx
+type ThemeProviderState = {
+	theme: Theme;
+	setTheme: (theme: Theme) => void;
+};
+```
+
+初始化状态并创建上下文
+```tsx
+const initialState: ThemeProviderState = {
+  theme: "system",
+  setTheme: () => null,
+};
+
+const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+```
+
+定义该组件
+```tsx
+export function ThemeProvider({
+  children,
+  defaultTheme = "system",
+  storageKey = "haraui-theme",
+  ...props
+}: ThemeProviderProps) {
+	const [theme,setTheme] = useState<Theme>(
+	    ()=>(localStorage.get(storageKey) as Theme) || defaultTheme
+	)
+	// 使用useState钩子初始化主题状态，优先从localStorage获取主题，否则使用默认主题。
+
+	const value= {...}
+	// 此value为上下文值，返回组件中传递给子组件
+
+	return (
+	    <ThemeProviderContext.Provider {...props} value={value}>
+	        {children}
+	    </ThemeProviderContext.Provider>
+	)
+}
+```
+
+在其中使用 `useEffect` 钩子在组件挂载和主题变化时应用主题，根据当前主题设置 `data-theme` 属性！
+```tsx
+useEffect(() => {
+const root = window.document.documentElement;
+
+const applyTheme = (currentTheme: Theme) => {
+  if (currentTheme === "system") {
+    const systemTheme = 
+      window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    root.setAttribute("data-theme", systemTheme);
+  } else {
+    root.setAttribute("data-theme", currentTheme);
+  }
+};
+
+applyTheme(theme);
+
+// 如果当前主题是"system"，则添加监听器以检测系统主题变化，并在变化时更新主题。返回一个清理函数以在组件卸载时移除监听器。
+if (theme === "system") {
+    const systemThemeListener = (e: MediaQueryListEvent) => {
+      applyTheme(e.matches ? "dark" : "light");
+    };
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", systemThemeListener);
+
+    return () => {
+      mediaQuery.removeEventListener("change", systemThemeListener);
+    };
+  }
+}, [theme]);
+```
+
+定义 `useTheme` 钩子给组件用（切换按钮）
+```tsx
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext);
+  if (context === undefined) {
+    throw new Error("useTheme must be used within a ThemeProvider");
+  }
+  return context;
+};
+```
+
+轮到使用的时候就把 `ThemeProvider` 包在 App 外边，然后在切换按钮的那个组件使用 useTheme 实例化提取出 `theme` 获取当前值和 `setTheme` 修改值就好了!!!
+
+之后就是关于样式咋写的问题，一个个在组件的 css 文件写有点太乱了，全都要 `[data-theme='dark'] ... {...}`，然后！终于想通为什么很多项目都有各种 css 参数例如 `--tailwind-ring` ，我完全可以把会变动的都写在 variable.css 文件里面，大致就是如此：
+![Local Image](../../public/images/haraui-variablecss.png)
+
