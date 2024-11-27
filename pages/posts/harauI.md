@@ -38,6 +38,78 @@ const SelectContext = createContext<SelectContextProps|undefined>(undefined)
 ### SelectItem
 `SelectItem` 组件表示下拉菜单中的一个选项，获取上下文根据选项是否被选中展示不同的样式（勾勾）点击选项时触发上下文的 `onSelect` 选择该选项，并根据使用 `Select` 组件时是否定义了 `onChange` 来处理选择的选项内容~
 
+### 使用 createPortal 来实现模态框等组件
+`Portal` 是 React 提供的一种机制，用于将子组件渲染到父组件 DOM 层次结构之外的 DOM 节点中。它通常用于实现模态框 (modal)、提示框 (tooltip) 或通知等需要在视觉上脱离当前组件层次结构的 UI 元素。
+
+需要注意的是它只改变 DOM 节点的所处位置。在其他方面，渲染至 portal 的 JSX 的行为表现与作为 React 组件的子节点一致。该子节点可以访问由父节点树提供的 context 对象、事件将从子节点依循 React 树冒泡到父节点。
+
+因此我修改了 `Select` 组件中的 `SelectContent`，使其通过 `ReactDOM.createPortal` 创建于和 `#root` 同级的位置，同时根据 `SelectTrigger` 的位置信息给予它的位置，为了防止视觉上的错误我禁用了滚动条滚动以及除了 `SelectContent` 以外的鼠标互动（通过设置样式 `pointer-events: auto` 实现）
+
+```tsx
+export const SelectContent: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const context = useContext(SelectContext);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const triggerRef = context?.triggerRef;
+
+  if (!context) throw new Error('SelectContent 必须在 Select 中使用');
+
+  // 传contentRef给context来处理点击页面任意一处关闭下拉菜单的功能
+  useEffect(() => {
+    if (context.isOpen && contentRef.current) {
+      context.setContentRef(contentRef.current);
+    }
+  }, [context.isOpen]);
+  
+  let triggerRect = triggerRef?.getBoundingClientRect();
+
+  let width = triggerRect?.width;
+  let height = triggerRect?.height;
+  let x = triggerRect?.x;
+  let y = (triggerRect?.y ?? 0) + (height ?? 0) + 10;
+  
+  return context.isOpen
+    ? createPortal(
+        <div
+          ref={contentRef}
+          className="hara-select-content"
+          style={{
+            transform: `translate(${x}px, ${y}px)`,
+            width: `${width}px`,
+          }}
+        >
+          {children}
+        </div>,
+        document.body,
+      )
+    : null;
+};
+```
+
+### 顺带加个动画吧！
+因为是直接创建渲染出来的，单纯通过添加类名和删除类名添加动画效果不生效，所以创建了一个定时器，当我们创建出 `SelectContent` 时标记显示，然后延迟触发动画添加类名，关闭菜单即卸载时就先关闭动画再卸载组件
+
+**重点是定时器!!!** 
+
+```tsx
+// selectContent:
+  const [isVisible, setIsVisible] = useState(false); // 控制是否显示到 DOM
+  const [isAnimating, setIsAnimating] = useState(false); // 控制动画状态
+  
+  useEffect(() => {
+    if (context.isOpen) {
+      setIsVisible(true); // 打开时立即显示
+      setTimeout(() => setIsAnimating(true), 0); // 延迟触发动画，确保 `open` 类生效
+    } else {
+      setIsAnimating(false); // 关闭动画开始
+      const timer = setTimeout(() => setIsVisible(false), 50); // 动画结束后卸载
+      return () => clearTimeout(timer);
+    }
+  }, [context.isOpen]);
+
+```
+
 ## 实现深浅主题切换
 一开始直接用的是 `@media(prefers-color-schema='dark') {}` 媒体查询的形式一个个写组件们的深色样式，结果发现没有生效，之后才发现原来这是**直接判断目前系统深浅主题**的功能啊喂！Σ(っ °Д °;)っ
 
@@ -144,3 +216,81 @@ export const useTheme = () => {
 之后就是关于样式咋写的问题，一个个在组件的 css 文件写有点太乱了，全都要 `[data-theme='dark'] ... {...}`，然后！终于想通为什么很多项目都有各种 css 参数例如 `--tailwind-ring` ，我完全可以把会变动的都写在 variable.css 文件里面，大致就是如此：
 ![Local Image](../../public/images/haraui-variablecss.png)
 
+## Switch 切换按钮
+此组件让我重新复习了一下受控和非受控组件的概念！
+
+受控和非受控组件一般指的是表单元素~！
++ 受控组件：组件值由 React 的**状态**控制，多用于表单元素（例如 `<input>` `<textarea>` `select`）绑定到 `React.state` 当中，并且通过 `onChange` 事件来更新状态。
+    + 表单元素值完全由状态管理
+    + 更容易同步 UI 和数据状态
+    + 适合需要验证和复杂逻辑的场景
+```js
+import React, { useState } from 'react';
+
+function ControlledComponent() {
+  const [value, setValue] = useState('');
+
+  const handleChange = (event) => {
+    setValue(event.target.value);
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    alert(`Submitted value: ${value}`);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label>
+        Name:
+        <input type="text" value={value} onChange={handleChange} />
+      </label>
+      <button type="submit">Submit</button>
+    </form>
+  );
+}
+
+export default ControlledComponent;
+```
+
++ 非受控组件：非受控组件的值不由 React 的状态控制，而是直接使用 DOM 引用 (`ref`) 获取值。
+	 + 表单元素的值由 DOM 自己管理
+	 + 更接近传统表单处理方式
+	 + 适合简单场景
+```js
+import React, { useRef } from 'react';
+
+function UncontrolledComponent() {
+  const inputRef = useRef();
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    alert(`Submitted value: ${inputRef.current.value}`);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label>
+        Name:
+        <input type="text" ref={inputRef} />
+      </label>
+      <button type="submit">Submit</button>
+    </form>
+  );
+}
+
+export default UncontrolledComponent;
+```
+
+---
+
+而自定义组件的受控与非受控，我认为该组件是否受控取决于**组件的内部状态是否由父组件控制**
+
+受控组件：父组件通过 `props` 控制自定义组件的状态如输入值、选中状态等，子组件的行为完全由父组件决定，状态集中于父组件，通过 `props` 下发，子组件仅负责渲染和触发回调，不维护自己的内部状态~
+非受控组件：状态存储在组件内部，组件内部自己维护自己的状态，父组件不直接干预子组件状态变化。
+
+如果我希望我的 `Switch` 切换按钮能保证拥有两种模式，首先可以通过 `checked` 来接收外部状态，并在 `useEffect` 中更新组件内 `internalChecked` 状态，如果 `checked` 未定义（也就是父组件不参与控制）则根据是否定义 `defaultChecked` 值或者默认为 `false`。
+
+接着组件内部的 `handleClick` 函数在点击时判断是否受外部控制，如果没有则更新内部状态并调用 `onCheckedChange` 回调函数~。
+
+这样 `Switch` 组件就可以在受控以及非受控模式下都能正常工作~！
